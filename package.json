@@ -1,0 +1,32 @@
+{
+  "name": "skrafl-pwa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mock": "npm run build:mock && vite --mode mock",
+    "build:dict": "bash scripts/build-dictionary.sh",
+    "build:mock": "python scripts/build-mock.py",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run tests/unit",
+    "test:differential": "vitest run tests/differential",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "size": "tsx scripts/bundle-size.ts"
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "eslint": "^10.12.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.5"
+  }
+}

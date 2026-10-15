@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REQUIRE_DIFFERENTIAL: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Read dictionary revision
+        id: dictionary
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const { upstreamSha } = JSON.parse(fs.readFileSync('dictionary.lock.json', 'utf8'));
+          if (!/^[a-f0-9]{40}$/.test(upstreamSha)) throw new Error('Invalid upstream SHA');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `sha=${upstreamSha}\n`);
+          JS
+      - name: Cache pinned dictionary inputs and output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .cache/upstream
+            public/dict
+          key: dictionary-${{ runner.os }}-${{ steps.dictionary.outputs.sha }}-${{ hashFiles('dictionary.lock.json', 'scripts/build-dictionary.*') }}
+      - name: Build and verify dictionary lock
+        run: npm run build:dict
+      - name: Cache Python oracle fixtures
+        id: oracle
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/differential.json
+          key: oracle-${{ runner.os }}-${{ steps.dictionary.outputs.sha }}-${{ hashFiles('tests/differential/generate.py') }}
+      - name: Generate Python oracle fixtures
+        if: steps.oracle.outputs.cache-hit != 'true'
+        run: |
+          cd .cache/upstream
+          python "$GITHUB_WORKSPACE/tests/differential/generate.py" "$GITHUB_WORKSPACE/.cache/differential.json"
+      - run: npm run test:differential
+      - run: npm run build
+      - run: npm run size
