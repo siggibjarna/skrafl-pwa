@@ -1,4 +1,6 @@
-import { compareWords } from './alphabet';
+import { compareWords, fullOrder, fullUpper } from './alphabet';
+
+const validPrefix = new RegExp(`^(?:[${fullOrder}${fullUpper}]\\|?)+$`);
 
 class Node {
   final = false;
@@ -125,6 +127,7 @@ export class Dawg {
 
   constructor(text: string) {
     let index = 1;
+    const defined = new Set<number>();
     const nodeAt = (id: number): Node => {
       let node = this.nodes.get(id);
       if (!node) {
@@ -135,21 +138,52 @@ export class Dawg {
     };
     for (const line of text.split(/\r?\n/)) {
       if (!line) continue;
-      const node = nodeAt(index > 1 ? index : 0);
+      const nodeId = index > 1 ? index : 0;
+      const node = nodeAt(nodeId);
+      defined.add(nodeId);
       index += 1;
       const edges = line.split('_');
       node.final = edges[0] === '|';
+      const firstLetters = new Set<string>();
       for (const edge of edges.slice(node.final ? 1 : 0)) {
         const parts = edge.split(':');
         const prefix = parts[0]!;
         const destination = parts[1];
-        if (!prefix || parts.length !== 2 || !/^\d+$/.test(destination ?? '')) {
+        if (!validPrefix.test(prefix) || parts.length !== 2 || !/^\d+$/.test(destination ?? '')) {
           throw new Error(`Invalid DAWG edge: ${edge}`);
         }
         const id = Number(destination);
+        if (!Number.isSafeInteger(id) || id === 1 || firstLetters.has(prefix[0]!)) {
+          throw new Error(`Invalid DAWG edge: ${edge}`);
+        }
+        firstLetters.add(prefix[0]!);
         node.edges.set(prefix, id === 0 ? null : nodeAt(id));
       }
     }
+    const root = this.nodes.get(0);
+    if (!root || !root.edges.size) throw new Error('DAWG root is empty');
+    for (const id of this.nodes.keys()) {
+      if (!defined.has(id)) throw new Error(`Missing DAWG node: ${id}`);
+    }
+    const visited = new Set<Node>();
+    const active = new Set<Node>();
+    const stack: Array<readonly [Node, boolean]> = [[root, false]];
+    while (stack.length) {
+      const [node, leaving] = stack.pop()!;
+      if (leaving) {
+        active.delete(node);
+        visited.add(node);
+        continue;
+      }
+      if (active.has(node)) throw new Error('DAWG contains a cycle');
+      if (visited.has(node)) continue;
+      active.add(node);
+      stack.push([node, true]);
+      for (const child of node.edges.values()) {
+        if (child !== null) stack.push([child, false]);
+      }
+    }
+    if (visited.size !== this.nodes.size) throw new Error('DAWG contains unreachable nodes');
   }
 
   find(word: string): boolean {

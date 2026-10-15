@@ -110,8 +110,8 @@ export class SkraflApp extends LitElement {
   }
 
   private async search(value: string, push = true): Promise<void> {
-    const input = value.trim();
-    if (!input || !this.client) return;
+    const input = value;
+    if (!input.trim() || !this.client) return;
     this.input = input;
     if (push) {
       const url = new URL(window.location.href);
@@ -171,10 +171,11 @@ export class SkraflApp extends LitElement {
   private applyFilters(): void {
     const min = Number.parseInt(this.filterMin, 10);
     const max = Number.parseInt(this.filterMax, 10);
+    const visibleMax = Number.isNaN(max) ? this.bounds.max : Math.max(0, Math.min(this.bounds.max, max));
     this.appliedFilter = {
       min: Number.isNaN(min) ? this.bounds.min : min,
-      max: Number.isNaN(max) ? this.bounds.max : Math.max(0, Math.min(this.bounds.max, max)),
-      positions: [...this.positions],
+      max: visibleMax,
+      positions: this.positions.slice(0, visibleMax),
       contains: this.filterContains,
     };
   }
@@ -214,7 +215,7 @@ export class SkraflApp extends LitElement {
           <div class="positions">
             ${repeat(Array.from({ length: this.positionCount }, (_, index) => index), (index) => index,
               (index) => html`<input class="position" type="text" maxlength="1"
-                autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+                autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
                 aria-label=${`Stafur í sæti ${index + 1}`} placeholder=${String(index + 1)}
                 .value=${this.positions[index] ?? ''}
                 @input=${(event: Event) => {
@@ -228,7 +229,7 @@ export class SkraflApp extends LitElement {
         <div class="filter-row">
           <label for="filter-contains">Inniheldur:</label>
           <input id="filter-contains" type="text" maxlength="7" placeholder="stafir"
-            autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
             .value=${this.filterContains} @input=${(event: Event) => {
               this.filterContains = (event.target as HTMLInputElement).value;
               this.scheduleFilters();
@@ -238,7 +239,18 @@ export class SkraflApp extends LitElement {
       </section>`;
   }
 
-  private renderWord(word: Word, combination = false) {
+  private get displayRack(): string {
+    return this.result?.rack.replace(/^= /, '=') ?? '';
+  }
+
+  private get displayValid(): boolean {
+    const result = this.result;
+    if (!result) return false;
+    return result.valid || (this.displayRack.startsWith('=')
+      && result.words.some(({ word }) => word === this.displayRack.slice(1)));
+  }
+
+  private renderWord(word: Word) {
     const result = this.result!;
     const rackLength = result.rack.replace(/\s/g, '').replace(/^=/, '').length;
     const color = word.word.length >= 7 ? 'bingo'
@@ -247,7 +259,7 @@ export class SkraflApp extends LitElement {
     return html`<a class="chip ${color}" href=${`?rack=${encodeURIComponent(word.word)}`}
       data-word=${word.word} @click=${(event: MouseEvent) => this.selectWord(event, word.word)}>
       ${high ? html`<span aria-label="Hæsta skor">★</span>` : nothing}
-      ${word.word}${!combination ? html`<span class="score">${word.score}</span>` : nothing}
+      ${word.word}<span class="score">${word.score}</span>
     </a>`;
   }
 
@@ -269,13 +281,13 @@ export class SkraflApp extends LitElement {
           <h2 id="results-heading">
             <a class="chip original" href=${`?rack=${encodeURIComponent(result.rack.replace(/\s/g, ''))}`}
               @click=${(event: MouseEvent) => this.selectWord(event, result.rack.replace(/\s/g, ''))}>
-              ${result.valid ? html`<span aria-label="Leyfilegt orð">✓</span>` : nothing}
-              ${result.rack}
+              ${this.displayValid ? html`<span aria-label="Leyfilegt orð">✓</span>` : nothing}
+              ${this.displayRack}
             </a>
           </h2>
           <span>hæsta skor <span aria-label="stjarna">★</span> <strong>${result.highscore}</strong></span>
         </div>
-        <p class="count" aria-live="polite">Orð: ${words.length} / ${result.words.length}</p>
+        <p class="count" aria-live="polite">${words.length} / ${result.words.length} orð</p>
         <div class="word-list">
           ${words.map((word) => this.renderWord(word))}
         </div>
@@ -285,12 +297,12 @@ export class SkraflApp extends LitElement {
       ${combinationTotal ? html`
         <section class="panel combinations" aria-labelledby="combinations-heading">
           <h2 id="combinations-heading">Að viðbættum einum staf</h2>
-          <p class="count" aria-live="polite">Samsetningar: ${combinationShown} / ${combinationTotal}</p>
+          <p class="count" aria-live="polite">Samsetningar: ${combinationShown} / ${combinationTotal} orð</p>
           <div class="word-list">
             ${groups.filter((group) => group.words.length).map((group) => html`
               <div class="combination-group">
                 <span class="letter" aria-label=${`Viðbættur stafur ${group.letter}`}>${group.letter}</span>
-                ${group.words.map((word) => this.renderWord(word, true))}
+                ${group.words.map((word) => this.renderWord(word))}
               </div>`)}
           </div>
           ${!combinationShown ? html`<p>Engin orð passa við síuna.</p>` : nothing}
@@ -368,7 +380,7 @@ export class SkraflApp extends LitElement {
             <label for="rack">Sláðu inn stafi úr skraflrekkanum</label>
             <div class="search-row">
               <input id="rack" name="rack" type="text" maxlength="15" required
-                autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+                autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
                 enterkeyhint="search" placeholder="Stafir, ? eða =mynstur" .value=${this.input}
                 @input=${(event: Event) => { this.input = (event.target as HTMLInputElement).value; }}>
               <button type="submit">Finna öll möguleg orð</button>

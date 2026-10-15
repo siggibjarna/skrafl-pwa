@@ -58,9 +58,12 @@ jobs:
           key: oracle-${{ runner.os }}-${{ steps.dictionary.outputs.sha }}-${{ hashFiles('tests/differential/generate.py') }}
       - name: Generate Python oracle fixtures
         if: steps.oracle.outputs.cache-hit != 'true'
+        env:
+          ORACLE_SHA: ${{ steps.dictionary.outputs.sha }}
         run: |
-          cd .cache/upstream
+          set -euo pipefail
+          cd ".cache/upstream/Skrafl-$ORACLE_SHA"
           python "$GITHUB_WORKSPACE/tests/differential/generate.py" "$GITHUB_WORKSPACE/.cache/differential.json"
-      - run: npm run test:differential
+      - run: REQUIRE_DIFFERENTIAL=1 npm run test:differential
       - run: npm run build
       - run: npm run size

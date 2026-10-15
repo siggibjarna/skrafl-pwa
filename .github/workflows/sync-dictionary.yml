@@ -71,10 +71,10 @@ jobs:
             npm run lint
             npm test
             (
-              cd .cache/upstream
+              cd ".cache/upstream/Skrafl-$UPSTREAM_SHA"
               python "$GITHUB_WORKSPACE/tests/differential/generate.py" "$GITHUB_WORKSPACE/.cache/differential.json"
             )
-            npm run test:differential
+            REQUIRE_DIFFERENTIAL=1 npm run test:differential
             npm run build
             npm run size
           } 2>&1 | tee .cache/dictionary-sync.log

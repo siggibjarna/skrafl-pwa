@@ -29,8 +29,9 @@ fresh worker. A terminated worker must load/parse its graph again.
 
 The UI uses semantic forms, labeled filters, a native help dialog, keyboard
 focus styles, and live status/count messages. Rack queries are encoded into
-browser history; there is no backend query API, account, or server-side rack
-storage. Hosting still receives ordinary asset requests.
+browser history; there is no backend query API or account. Hosting still
+receives ordinary requests, and opening or sharing a query URL can expose its
+rack to browser history, recipients, and hosting access logs.
 
 ## Dictionary production and provenance
 

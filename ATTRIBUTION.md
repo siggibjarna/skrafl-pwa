@@ -28,7 +28,10 @@ upstream project's word-list additions/removals and its Icelandic word-game
 conventions. Upstream credits the two-letter word list to **Skraflfélag Íslands**
 and its word committee's September 2015 decision.
 
-Consult BÍN's [data usage terms](https://bin.arnastofnun.is/gogn/skilmalar/) and
+Dictionary data: **BÍN © Stofnun Árna Magnússonar í íslenskum fræðum**.
+
+Dictionary data is used subject to BÍN's
+[data usage terms](https://bin.arnastofnun.is/gogn/skilmalar/); see also the
 [BÍN website](https://bin.arnastofnun.is/). Data rights and conditions are separate
 from source-code rights. Upstream use of BÍN does not establish that every
 downstream use or redistribution is authorized. A generated DAWG is still

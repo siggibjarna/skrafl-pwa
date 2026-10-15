@@ -31,6 +31,9 @@ HANDPICKED = [
     "abcdefghijklmnop", "a" * 15, "a" * 16, "a" * 15 + "!",
     "=" + "a" * 14 + "!", " " * 15 + "ár", "hestur" + " " * 10 + "!",
     "= " , "=hestur ", " =hestur", "=ár", "=ÁR", "=a_",
+    "afi", "orðabók", "þjóðin", "rrssttu", "ÞjÓð", "ska?", "ska_",
+    "ska*", "a??", "ab???", "=????", "=?ex?", "=sk?fl", "=" + "?" * 15,
+    "skraflw", "abc1", "á b", "b", "   ",
 ]
 
 
@@ -76,9 +79,13 @@ def expected(input_text):
 
 
 def random_inputs(rng, count):
-    bag = Alphabet.full_bag()
-    for _ in range(count * 4 // 5):
-        rack = "".join(rng.sample(bag, rng.randint(2, 8)))
+    bag = Alphabet.full_bag().replace("?", "")
+    for index in range(count * 4 // 5):
+        # Deliberately cover zero, one and two blanks rather than hoping to draw them.
+        blanks = 2 if index % 10 == 0 else 1 if index % 10 in (1, 2) else 0
+        tiles = rng.sample(bag, rng.randint(2, 8) - blanks) + ["?"] * blanks
+        rng.shuffle(tiles)
+        rack = "".join(tiles)
         if rng.random() < 0.12:
             rack = rack.upper()
         if rng.random() < 0.10:
@@ -90,7 +97,7 @@ def random_inputs(rng, count):
     with Path("resources/ordalisti.full.sorted.txt").open(encoding="utf-8") as stream:
         for line in stream:
             word = line.strip()
-            if not 2 <= len(word) <= 14:
+            if not 2 <= len(word) <= 8:
                 continue
             seen += 1
             if len(sample) < 1000:

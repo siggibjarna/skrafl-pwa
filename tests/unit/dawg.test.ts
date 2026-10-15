@@ -55,21 +55,29 @@ describe('text DAWG navigation', () => {
     expect(dawg.find('aaaa')).toBe(false);
   });
 
-  it('keeps calls independent and permits an empty graph', () => {
+  it('keeps calls independent', () => {
     const dawg = new Dawg(text);
     const first = dawg.permutations('??');
     first.push('not-in-dictionary');
     expect(dawg.permutations('??')).toEqual(['do']);
     expect(dawg.match('??')).toEqual(['do']);
-    const empty = new Dawg('');
-    expect(empty.find('a')).toBe(false);
-    expect(empty.match('?')).toEqual([]);
-    expect(empty.permutations('?')).toEqual([]);
   });
 
   it('rejects malformed edge records rather than silently changing the graph', () => {
-    for (const malformed of ['a', 'a:x', ':0', 'a:-1', 'a:0:1']) {
-      expect(() => new Dawg(malformed)).toThrow();
+    for (const malformed of [
+      '', '\n\r\n', '|', 'a', 'a:x', ':0', 'a:-1', 'a:0:1',
+      'a:1', 'a:2', 'a:999999999999999999999999',
+      '|a:0', 'a||b:0', 'a?:0', 'a b:0', 'a😀:0', 'a:0_a:0', 'a:0_ab:0',
+      'a:0\nb:0', 'a:2\nb:2', 'a:2\nb:3\nc:2',
+    ]) {
+      expect(() => new Dawg(malformed), JSON.stringify(malformed)).toThrow();
+    }
+  });
+
+  it('permits final markers after letters and supports uppercase and foreign alphabet letters', () => {
+    const dawg = new Dawg('A|B:0_c|q|w|z|:0');
+    for (const word of ['A', 'AB', 'c', 'cq', 'cqw', 'cqwz']) {
+      expect(dawg.find(word), word).toBe(true);
     }
   });
 

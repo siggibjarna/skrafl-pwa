@@ -31,7 +31,7 @@ export function processInput(input: string, dawg: Dawg): SearchResult {
   const truncated = Array.from(input.normalize('NFC')).slice(0, 15).join('');
   let rack = truncated.replace(boundaryWhitespace, '');
   const result: SearchResult = {
-    ok: false, error: null, rack: truncated, words: [], highscore: 0,
+    ok: false, error: null, rack: '', words: [], highscore: 0,
     highwords: [], combinations: [], valid: false,
   };
   function fail(message: string): SearchResult {
@@ -40,7 +40,10 @@ export function processInput(input: string, dawg: Dawg): SearchResult {
   }
   if (!rack) return fail('Sláðu inn stafi.');
   const pattern = rack.startsWith('=');
-  if (pattern) rack = rack.slice(1);
+  if (pattern) {
+    result.rack = '= ';
+    rack = rack.slice(1);
+  }
   let normalized = '';
   let wildcards = 0;
   for (const character of rack) {

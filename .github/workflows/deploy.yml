@@ -39,8 +39,15 @@ jobs:
           echo "sha=$REQUESTED_SHA" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.revision.outputs.sha }}
+          ref: main
           persist-credentials: false
+      - name: Verify trusted main checkout matches requested revision
+        env:
+          VERIFIED_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$VERIFIED_SHA" || { echo 'Main changed before checkout; refusing mismatched build'; exit 1; }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
@@ -74,10 +81,13 @@ jobs:
           key: oracle-${{ runner.os }}-${{ steps.dictionary.outputs.sha }}-${{ hashFiles('tests/differential/generate.py') }}
       - name: Generate Python oracle fixtures
         if: steps.oracle.outputs.cache-hit != 'true'
+        env:
+          ORACLE_SHA: ${{ steps.dictionary.outputs.sha }}
         run: |
-          cd .cache/upstream
+          set -euo pipefail
+          cd ".cache/upstream/Skrafl-$ORACLE_SHA"
           python "$GITHUB_WORKSPACE/tests/differential/generate.py" "$GITHUB_WORKSPACE/.cache/differential.json"
-      - run: npm run test:differential
+      - run: REQUIRE_DIFFERENTIAL=1 npm run test:differential
       - run: npm run build && npm run size
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

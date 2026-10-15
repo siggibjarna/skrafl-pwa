@@ -14,7 +14,8 @@ redistributing either source or dictionary data.
 
 - Enter rack letters; `?`, `_`, and `*` represent blank tiles (at most two in rack mode).
 - Prefix a pattern with `=`, for example `=h??t?r`, to match exact positions and length.
-- Results show tile scores, highest-scoring words, anagrams, and seven-tile words.
+- Results show tile scores, highest-scoring words, anagrams, and words of seven
+  or more letters.
   Rack mode without blanks also offers words made by adding one letter.
 - Filter both result lists by length, fixed positions, or required letters.
   Repeated required letters require repeated occurrences.
@@ -55,7 +56,8 @@ npm run lint
 npm test
 npm run build:dict
 ROOT="$PWD"
-(cd .cache/upstream && python "$ROOT/tests/differential/generate.py" "$ROOT/.cache/differential.json")
+SHA="$(node -p 'JSON.parse(require("fs").readFileSync("dictionary.lock.json", "utf8")).upstreamSha')"
+(cd ".cache/upstream/Skrafl-$SHA" && python "$ROOT/tests/differential/generate.py" "$ROOT/.cache/differential.json")
 REQUIRE_DIFFERENTIAL=1 npm run test:differential
 npm run build
 npm run size

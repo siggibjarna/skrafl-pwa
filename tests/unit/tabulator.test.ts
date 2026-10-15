@@ -97,6 +97,21 @@ describe('upstream rack tabulation', () => {
     expect(processInput('\u0085\u001ca\u001f', dawg).rack).toBe('a');
   });
 
+  it('preserves Python rack() state on every error instead of echoing rejected input', () => {
+    for (const input of ['', ' ', 'abc!', 'a b', 'a=b', '???', 'a'.repeat(14) + '!']) {
+      const result = processInput(input, dawg);
+      expect(result.ok, input).toBe(false);
+      expect(result.rack, input).toBe('');
+      expect(result.valid, input).toBe(false);
+    }
+    for (const input of ['= abc', '=c', '=ab!', ' =\t?']) {
+      const result = processInput(input, dawg);
+      expect(result.ok, input).toBe(false);
+      expect(result.rack, input).toBe('= ');
+      expect(result.valid, input).toBe(false);
+    }
+  });
+
   it('composes NFC at the public boundary and truncates before stripping whitespace', () => {
     expect(processInput('A\u0301R', dawg)).toEqual(processInput('ÁR', dawg));
     expect(processInput('o\u0308r', dawg)).toEqual(processInput('ör', dawg));

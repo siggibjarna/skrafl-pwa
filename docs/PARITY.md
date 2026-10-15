@@ -27,10 +27,14 @@ reported count rather than assuming a permanently fixed fixture count.
 ## Preserved behavior
 
 - Icelandic alphabet ordering and tile values are explicit.
+  Upstream's secondary Latin-1 sort-key rotation is retained, including the
+  unusual keys for uppercase `Ö` and lowercase `ö`; it is not replaced with
+  `Intl.Collator` or ordinary Unicode ordering.
 - `?`, `_`, and `*` normalize to blanks. Rack mode rejects more than two;
   exact-pattern mode can use more.
 - A leading `=` selects exact-length pattern matching; it counts toward the
   15-code-point web limit. Internal whitespace is not removed by the engine.
+  A bare `=` succeeds with an empty pattern and no returned words.
 - Rack results are ordered by descending length, then Icelandic order.
   Pattern matches are ordered alphabetically.
 - Blank tiles score zero in rack mode. Pattern wildcard matches receive the
@@ -52,24 +56,37 @@ by the normalized pattern**. For example, `=h??t?r` returns a rack beginning
 the next submitted query. This corrects a presentation round-trip issue without
 changing the oracle contract.
 
-The UI trims an entered query before submitting it; the direct engine boundary
-still accepts the untrimmed strings covered by oracle fixtures. Browser input
-length enforcement also differs from a code-point-aware engine limit for
-non-BMP characters; the engine remains the authoritative validation layer.
+The UI passes the original entered query to the worker unchanged; it only uses
+a trimmed copy to detect an empty submission. NFC normalization and
+truncate-before-strip therefore happen at the same engine boundary for UI and
+direct calls. Browser input length enforcement still differs from a
+code-point-aware engine limit for non-BMP characters; the engine remains the
+authoritative validation layer.
+
+Validity and anagram presentation do not treat the decorated `"= "` display
+rack as literal tiles. The validity tick uses the engine's `valid` result;
+patterns retain `valid: false` and do not receive that tick. Anagram coloring
+compares word length with the normalized rack/pattern length after removing the
+display prefix and space, unlike the legacy template's raw display-string
+length comparison. Thus a short full-pattern match can receive anagram coloring
+even though the pattern has no validity tick. Seven-or-more-letter coloring
+takes precedence. These are presentation rules, not changes to engine results.
 
 The PWA replaces server-rendered pages with Lit, browser history, a worker,
 offline assets, retry/status messages, and a user-confirmed update prompt.
 Length, fixed-position, and required-letter filters are presentation-only and
 apply to both lists without rerunning the engine. Required letters have multiset
 semantics; filtering preserves engine ordering and the original highest score.
-Visual seven-letter/anagram emphasis is not a change to scoring.
+Visual emphasis for words of seven or more letters and anagrams is not a change
+to scoring.
 
 ## Running the contract
 
 ```sh
 npm run build:dict
 ROOT="$PWD"
-(cd .cache/upstream && python "$ROOT/tests/differential/generate.py" "$ROOT/.cache/differential.json")
+SHA="$(node -p 'JSON.parse(require("fs").readFileSync("dictionary.lock.json", "utf8")).upstreamSha')"
+(cd ".cache/upstream/Skrafl-$SHA" && python "$ROOT/tests/differential/generate.py" "$ROOT/.cache/differential.json")
 REQUIRE_DIFFERENTIAL=1 npm run test:differential
 ```
 

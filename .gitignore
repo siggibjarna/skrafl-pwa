@@ -6,3 +6,4 @@ public/mock/
 *.local
 __pycache__/
 .DS_Store
+.browser-verification/
