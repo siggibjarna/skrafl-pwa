@@ -69,6 +69,7 @@ jobs:
             npm run build:dict
             npm run typecheck
             npm run lint
+            npm run build:mock
             npm test
             (
               cd ".cache/upstream/Skrafl-$UPSTREAM_SHA"

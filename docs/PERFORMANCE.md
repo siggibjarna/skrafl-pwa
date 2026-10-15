@@ -80,6 +80,46 @@ A 390 × 844 viewport emulation showed no horizontal page overflow. This is
 **not an iPhone measurement**. No physical iPhone/Safari, installed-iOS,
 Lighthouse, complete input-to-paint, or worker-memory result is claimed.
 
+### Focused follow-up — corrected final bundle
+
+After the combination-chip scores, compact pattern display/validity indicator,
+and Python-compatible error-rack corrections landed, the production build at
+`4ee12bd518d51b1f142402b8a32abd87800100bb` was checked separately:
+`assets/index-CJP1TItA.js` and `assets/engine-worker-DY8jjZSZ.js`.
+The five-sample benchmark table above belongs to the earlier explicitly named
+build; it was **not** rerun or relabeled as final-bundle timings.
+
+In the same desktop environment, a fresh browser profile supplied these
+additional engine observations, each with **one sample**:
+
+| Final-bundle observation | Parse (ms) | Search (ms) |
+| --- | ---: | ---: |
+| First worker, first `afi` search | 1,236.5 | 9.4 |
+| Same worker, subsequent `=afi` search | — | 0.5 |
+| Fresh worker after offline reload, `=afi` | 1,128.9 | 1.5 |
+| Same offline worker, subsequent `afi` | — | 12.6 |
+| Fresh navigation with preview server stopped, `=afi` | 789.1 | 1.5 |
+
+These remain engine-only timings, not download, rendering, total startup, or
+percentile measurements. Dictionary raw/gzip sizes are unchanged.
+
+Thirteen focused browser assertions passed: all 35 `afi` additional-letter
+chips showed scores matching the engine; `=afi` displayed a compact prefix and
+legal-word check while preserving the Python-compatible engine result
+(`rack: "= afi"`, `valid: false`); wildcard patterns displayed compactly without
+a false legal-word check. Invalid ordinary/pattern input and excessive blanks
+retained the expected Python error-rack values and error UI. An initial URL
+containing 15 spaces followed by `ár` was rejected after truncation, rather than
+incorrectly searching `ár`.
+
+CacheStorage contained the updated shell/worker assets and real hashed DAWG.
+After clearing the HTTP cache, a full offline reload preserved the corrected
+pattern UI; a new offline `afi` search displayed all 35 combination scores.
+With the preview server then stopped and confirmed unreachable, another fresh
+navigation to `?rack=%3Dafi` loaded a new worker and rendered `=afi` with its
+legal-word check. No full test suite or five-sample benchmark was rerun for this
+focused follow-up.
+
 ## Design choices
 
 - Dictionary download and text-graph parsing are deferred to the first search.
@@ -118,8 +158,9 @@ thread; it does not make every search or render constant-time.
    behavior rather than extrapolating from desktop results.
 9. Wait for service-worker installation, reload under its control, then disable
    the network and repeat startup/search. Test update acceptance and failure/
-   retry paths. Repeat in an installed iOS app, whose storage may differ from
-   Safari's tab storage.
+   retry paths. iOS Home Screen storage is separate from Safari's tab storage,
+   so the first installed-app launch downloads the dictionary again. Repeat the
+   checks in the installed app after that online launch.
 
 CI size output supplies build evidence only. Browser offline, responsiveness,
 and accessibility checks require their own recorded results; they should not be

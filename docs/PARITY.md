@@ -52,9 +52,9 @@ reported count rather than assuming a permanently fixed fixture count.
 
 The engine preserves upstream's pattern display rack exactly: **`"= "` followed
 by the normalized pattern**. For example, `=h??t?r` returns a rack beginning
-`= h…`. The clickable original-query chip removes that display-only space from
-the next submitted query. This corrects a presentation round-trip issue without
-changing the oracle contract.
+`= h…`. The clickable original-query chip removes that display-only space both
+on screen and from the next submitted query. This corrects a presentation
+round-trip issue without changing the oracle contract.
 
 The UI passes the original entered query to the worker unchanged; it only uses
 a trimmed copy to detect an empty submission. NFC normalization and
@@ -64,12 +64,13 @@ code-point-aware engine limit for non-BMP characters; the engine remains the
 authoritative validation layer.
 
 Validity and anagram presentation do not treat the decorated `"= "` display
-rack as literal tiles. The validity tick uses the engine's `valid` result;
-patterns retain `valid: false` and do not receive that tick. Anagram coloring
-compares word length with the normalized rack/pattern length after removing the
+rack as literal tiles. Rack searches use the engine's `valid` result. Patterns
+retain `valid: false` in engine output; the UI adds a tick for a literal pattern
+when its undecorated text occurs among the returned exact matches. Anagram
+coloring compares word length with the normalized rack/pattern length after removing the
 display prefix and space, unlike the legacy template's raw display-string
 length comparison. Thus a short full-pattern match can receive anagram coloring
-even though the pattern has no validity tick. Seven-or-more-letter coloring
+whether or not the pattern has a validity tick. Seven-or-more-letter coloring
 takes precedence. These are presentation rules, not changes to engine results.
 
 The PWA replaces server-rendered pages with Lit, browser history, a worker,

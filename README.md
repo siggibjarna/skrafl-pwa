@@ -5,6 +5,8 @@ An offline-first Icelandic word-game helper, porting the engine of
 to TypeScript. Lit renders the interface; a Web Worker searches the real upstream
 DAWG dictionary. There is no application server.
 
+Pages URL after deployment: https://siggibjarna.github.io/skrafl-pwa/
+
 **Rights notice:** upstream source is public but has no explicit license grant.
 Permission for this port and redistribution remains unresolved. Public availability
 is not permission. See [ATTRIBUTION.md](ATTRIBUTION.md) before publishing or
@@ -53,6 +55,7 @@ for parity checks or publication.
 ```sh
 npm run typecheck
 npm run lint
+npm run build:mock
 npm test
 npm run build:dict
 ROOT="$PWD"
@@ -77,8 +80,9 @@ also requires changing Vite's base, manifest start URL, and scope together.
 
 Visit online and allow the service worker to finish caching the application and
 dictionary before relying on offline operation. On iPhone/iPad, use Safari's
-**Share → Add to Home Screen**. The Home Screen installation and Safari may have
-separate storage: open the installed app online once too. Browser/OS storage
+**Share → Add to Home Screen**. On iOS, the Home Screen installation has separate
+storage from Safari, so its first launch downloads the dictionary again: open
+the installed app online once too. Browser/OS storage
 eviction, private browsing, and clearing site data can remove offline content.
 Offline availability is not guaranteed indefinitely.
 

@@ -63,7 +63,7 @@ def expected(input_text):
     return {
         "ok": ok,
         "error": error,
-        "rack": tab.rack() if ok else rack,
+        "rack": tab.rack(),
         "words": [{"word": word, "score": score} for word, score in tab.allwords()],
         "highscore": tab.highscore(),
         "highwords": tab.highwords(),
@@ -74,7 +74,7 @@ def expected(input_text):
             }
             for letter, words in (tab.combinations() or [])
         ],
-        "valid": bool(ok and not tab._pattern and tab.is_valid_word(tab._rack)),
+        "valid": bool(tab.is_valid_word(tab.rack())),
     }
 
 
