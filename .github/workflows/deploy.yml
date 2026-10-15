@@ -1,0 +1,119 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact verified main commit to deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REQUIRE_DIFFERENTIAL: '1'
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - name: Validate requested revision
+        id: revision
+        env:
+          REQUESTED_SHA: ${{ inputs.ref || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$REQUESTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          current="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          test "$REQUESTED_SHA" = "$current" || { echo 'Refusing stale or non-main deployment'; exit 1; }
+          echo "sha=$REQUESTED_SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Verify trusted main checkout matches requested revision
+        env:
+          VERIFIED_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$VERIFIED_SHA" || { echo 'Main changed before checkout; refusing mismatched build'; exit 1; }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - name: Read dictionary revision
+        id: dictionary
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const { upstreamSha } = JSON.parse(fs.readFileSync('dictionary.lock.json', 'utf8'));
+          if (!/^[a-f0-9]{40}$/.test(upstreamSha)) throw new Error('Invalid upstream SHA');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `sha=${upstreamSha}\n`);
+          JS
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .cache/upstream
+            public/dict
+          key: dictionary-${{ runner.os }}-${{ steps.dictionary.outputs.sha }}-${{ hashFiles('dictionary.lock.json', 'scripts/build-dictionary.*') }}
+      - run: npm run build:dict
+      - run: npm run build:mock
+      - run: npm run typecheck && npm run lint && npm test
+      - name: Cache Python oracle fixtures
+        id: oracle
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/differential.json
+          key: oracle-${{ runner.os }}-${{ steps.dictionary.outputs.sha }}-${{ hashFiles('tests/differential/generate.py') }}
+      - name: Generate Python oracle fixtures
+        if: steps.oracle.outputs.cache-hit != 'true'
+        env:
+          ORACLE_SHA: ${{ steps.dictionary.outputs.sha }}
+        run: |
+          set -euo pipefail
+          cd ".cache/upstream/Skrafl-$ORACLE_SHA"
+          python "$GITHUB_WORKSPACE/tests/differential/generate.py" "$GITHUB_WORKSPACE/.cache/differential.json"
+      - run: REQUIRE_DIFFERENTIAL=1 npm run test:differential
+      - run: npm run build && npm run size
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Refuse a superseded build
+        env:
+          VERIFIED_SHA: ${{ needs.build.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          test "$VERIFIED_SHA" = "$current" || { echo 'Main changed; refusing stale deployment'; exit 1; }
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

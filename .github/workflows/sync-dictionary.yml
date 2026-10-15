@@ -1,0 +1,188 @@
+name: Sync dictionary
+
+on:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dictionary-sync
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REQUIRE_DIFFERENTIAL: '1'
+    outputs:
+      changed: ${{ steps.candidate.outputs.changed }}
+      base: ${{ steps.base.outputs.sha }}
+      lock: ${{ steps.lock.outputs.json }}
+      failure_log: ${{ steps.failure.outputs.log }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Record trusted main snapshot
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Find newest upstream resource revision
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          candidate="$(gh api 'repos/vthorsteinsson/Skrafl/commits?path=resources&per_page=1' --jq '.[0].sha')"
+          [[ "$candidate" =~ ^[a-f0-9]{40}$ ]]
+          locked="$(node -p 'JSON.parse(require("fs").readFileSync("dictionary.lock.json", "utf8")).upstreamSha')"
+          echo "sha=$candidate" >> "$GITHUB_OUTPUT"
+          if test "$candidate" = "$locked"; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.candidate.outputs.changed == 'true'
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: steps.candidate.outputs.changed == 'true'
+        with:
+          python-version: '3.11'
+      - name: Build candidate and run complete verification
+        if: steps.candidate.outputs.changed == 'true'
+        env:
+          UPSTREAM_SHA: ${{ steps.candidate.outputs.sha }}
+          UPDATE_DICTIONARY_LOCK: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p .cache
+          {
+            npm ci
+            npm run build:dict
+            npm run typecheck
+            npm run lint
+            npm run build:mock
+            npm test
+            (
+              cd ".cache/upstream/Skrafl-$UPSTREAM_SHA"
+              python "$GITHUB_WORKSPACE/tests/differential/generate.py" "$GITHUB_WORKSPACE/.cache/differential.json"
+            )
+            REQUIRE_DIFFERENTIAL=1 npm run test:differential
+            npm run build
+            npm run size
+          } 2>&1 | tee .cache/dictionary-sync.log
+      - name: Export verified lock only
+        id: lock
+        if: steps.candidate.outputs.changed == 'true'
+        env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          lock = json.loads(Path("dictionary.lock.json").read_text())
+          assert lock["upstreamSha"] == os.environ["CANDIDATE_SHA"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("json=" + json.dumps(lock, separators=(",", ":")) + "\n")
+          PY
+      - name: Bound failure diagnostics
+        id: failure
+        if: failure()
+        run: |
+          python - <<'PY'
+          import base64, os
+          from pathlib import Path
+          path = Path(".cache/dictionary-sync.log")
+          text = path.read_text(errors="replace") if path.exists() else "Failure occurred before candidate validation; see the workflow run."
+          text = "\n".join(text.splitlines()[-80:])[-12000:]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("log=" + base64.b64encode(text.encode()).decode() + "\n")
+          PY
+
+  publish:
+    needs: verify
+    if: needs.verify.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.base }}
+          persist-credentials: false
+      - name: Write verified lock without executing candidate code
+        env:
+          VERIFIED_LOCK: ${{ needs.verify.outputs.lock }}
+        run: |
+          python - <<'PY'
+          import datetime, json, os, re
+          from pathlib import Path
+          lock = json.loads(os.environ["VERIFIED_LOCK"])
+          assert set(lock) == {"upstreamSha", "sha256", "bytes", "builtAt"}
+          assert re.fullmatch(r"[a-f0-9]{40}", lock["upstreamSha"])
+          assert re.fullmatch(r"[a-f0-9]{64}", lock["sha256"])
+          assert type(lock["bytes"]) is int and 0 < lock["bytes"] < 100_000_000
+          datetime.datetime.fromisoformat(lock["builtAt"].replace("Z", "+00:00"))
+          Path("dictionary.lock.json").write_text(json.dumps(lock, indent=2) + "\n")
+          PY
+      - name: Commit lock and fast-forward main
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_BASE: ${{ needs.verify.outputs.base }}
+        run: |
+          set -euo pipefail
+          current="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          test "$current" = "$VERIFIED_BASE" || { echo 'Main changed during verification; retry the sync'; exit 1; }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- dictionary.lock.json
+          git commit -m 'chore: sync verified upstream dictionary' -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
+          git -c credential.helper='!gh auth git-credential' push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ needs.publish.outputs.sha }}
+
+  report-failure:
+    needs: [verify, publish, deploy]
+    if: always() && contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open issue with bounded diagnostics
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILURE_LOG: ${{ needs.verify.outputs.failure_log }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python - <<'PY' | gh api --method POST "repos/$GITHUB_REPOSITORY/issues" --input -
+          import base64, json, os
+          encoded = os.environ.get("FAILURE_LOG", "")
+          log = base64.b64decode(encoded).decode(errors="replace")[-12000:] if encoded else "Publishing or deployment failed; see the linked workflow run."
+          body = "Dictionary synchronization failed. No unverified candidate is published.\n\nRun: " + os.environ["RUN_URL"]
+          body += "\n\n<details><summary>Bounded verification log (last 80 lines, at most 12,000 characters)</summary>\n\n````\n" + log.replace("````", "''''") + "\n````\n</details>"
+          print(json.dumps({"title": "Dictionary synchronization failed", "body": body}))
+          PY
