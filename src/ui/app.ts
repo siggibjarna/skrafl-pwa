@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import type { SearchResult } from '../engine/tabulator';
 import { EngineClient } from '../worker/client';
-import { matchesFilter, wordLengthBounds, type WordFilter } from './filter';
+import { matchesFilter, sortByScore, wordLengthBounds, type WordFilter } from './filter';
 
 type Word = SearchResult['words'][number];
 
@@ -17,6 +17,8 @@ export class SkraflApp extends LitElement {
     filterMin: { state: true },
     filterMax: { state: true },
     positions: { state: true },
+    endPositions: { state: true },
+    sortMode: { state: true },
     filterContains: { state: true },
     appliedFilter: { state: true },
     updateAvailable: { state: true },
@@ -32,6 +34,8 @@ export class SkraflApp extends LitElement {
   declare private filterMin: string;
   declare private filterMax: string;
   declare private positions: string[];
+  declare private endPositions: string[];
+  declare private sortMode: 'default' | 'score';
   declare private filterContains: string;
   declare private appliedFilter: WordFilter;
   declare private updateAvailable: (() => Promise<void>) | null;
@@ -52,8 +56,10 @@ export class SkraflApp extends LitElement {
     this.filterMin = '1';
     this.filterMax = '15';
     this.positions = [];
+    this.endPositions = [];
+    this.sortMode = 'default';
     this.filterContains = '';
-    this.appliedFilter = { min: 1, max: 15, positions: [], contains: '' };
+    this.appliedFilter = { min: 1, max: 15, positions: [], endPositions: [], contains: '' };
     this.updateAvailable = null;
     this.updating = false;
   }
@@ -86,6 +92,7 @@ export class SkraflApp extends LitElement {
     } else {
       this.requestId++;
       this.result = null;
+      this.sortMode = 'default';
       this.failure = '';
       this.searching = false;
       this.client?.dispose();
@@ -123,6 +130,7 @@ export class SkraflApp extends LitElement {
     this.status = '';
     this.failure = '';
     this.result = null;
+    this.sortMode = 'default';
     try {
       const result = await this.client.search(input);
       if (requestId !== this.requestId) return;
@@ -145,6 +153,20 @@ export class SkraflApp extends LitElement {
   private retry(): void {
     this.client?.retry();
     void this.search(this.input, false);
+  }
+
+  private focusRack(): void {
+    this.renderRoot.querySelector<HTMLInputElement>('#rack')?.focus();
+  }
+
+  private clearInput(): void {
+    this.input = '';
+    void this.updateComplete.then(() => this.focusRack());
+  }
+
+  private toggleEquals(): void {
+    this.input = this.input.startsWith('=') ? this.input.slice(1) : `=${this.input}`.slice(0, 15);
+    void this.updateComplete.then(() => this.focusRack());
   }
 
   private submit(event: Event): void {
@@ -176,6 +198,7 @@ export class SkraflApp extends LitElement {
       min: Number.isNaN(min) ? this.bounds.min : min,
       max: visibleMax,
       positions: this.positions.slice(0, visibleMax),
+      endPositions: this.endPositions.slice(0, visibleMax),
       contains: this.filterContains,
     };
   }
@@ -185,6 +208,7 @@ export class SkraflApp extends LitElement {
     this.filterMin = String(this.bounds.min);
     this.filterMax = String(this.bounds.max);
     this.positions = [];
+    this.endPositions = [];
     this.filterContains = '';
     this.applyFilters();
   }
@@ -211,7 +235,7 @@ export class SkraflApp extends LitElement {
             }}>
         </div>
         <fieldset>
-          <legend>Sæti:</legend>
+          <legend>Sæti frá byrjun:</legend>
           <div class="positions">
             ${repeat(Array.from({ length: this.positionCount }, (_, index) => index), (index) => index,
               (index) => html`<input class="position" type="text" maxlength="1"
@@ -222,6 +246,22 @@ export class SkraflApp extends LitElement {
                   const positions = [...this.positions];
                   positions[index] = (event.target as HTMLInputElement).value;
                   this.positions = positions;
+                  this.scheduleFilters();
+                }}>`)}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Sæti frá enda:</legend>
+          <div class="positions end">
+            ${repeat(Array.from({ length: this.positionCount }, (_, index) => this.positionCount - 1 - index), (index) => index,
+              (index) => html`<input class="position" type="text" maxlength="1"
+                autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                aria-label=${`Stafur í sæti ${index + 1} frá enda`} placeholder=${String(index + 1)}
+                .value=${this.endPositions[index] ?? ''}
+                @input=${(event: Event) => {
+                  const endPositions = [...this.endPositions];
+                  endPositions[index] = (event.target as HTMLInputElement).value;
+                  this.endPositions = endPositions;
                   this.scheduleFilters();
                 }}>`)}
           </div>
@@ -250,7 +290,7 @@ export class SkraflApp extends LitElement {
       && result.words.some(({ word }) => word === this.displayRack.slice(1)));
   }
 
-  private renderWord(word: Word) {
+  private renderWord(word: Word, letter?: string) {
     const result = this.result!;
     const rackLength = result.rack.replace(/\s/g, '').replace(/^=/, '').length;
     const color = word.word.length >= 7 ? 'bingo'
@@ -258,6 +298,7 @@ export class SkraflApp extends LitElement {
     const high = result.highwords.includes(word.word);
     return html`<a class="chip ${color}" href=${`?rack=${encodeURIComponent(word.word)}`}
       data-word=${word.word} @click=${(event: MouseEvent) => this.selectWord(event, word.word)}>
+      ${letter ? html`<span class="added" aria-label=${`Viðbættur stafur ${letter}`}>${letter}</span>` : nothing}
       ${high ? html`<span aria-label="Hæsta skor">★</span>` : nothing}
       ${word.word}<span class="score">${word.score}</span>
     </a>`;
@@ -267,11 +308,14 @@ export class SkraflApp extends LitElement {
     const result = this.result;
     if (!result) return nothing;
     if (!result.ok) return html`<p class="notice" role="alert">${result.error ?? 'Ekki tókst að leita.'}</p>`;
-    const words = result.words.filter(({ word }) => matchesFilter(word, this.appliedFilter));
+    const bySort = this.sortMode === 'score';
+    const filtered = result.words.filter(({ word }) => matchesFilter(word, this.appliedFilter));
+    const words = bySort ? sortByScore(filtered) : filtered;
     const groups = result.combinations.map((group) => ({
       ...group,
       words: group.words.filter(({ word }) => matchesFilter(word, this.appliedFilter)),
     }));
+    const flat = sortByScore(groups.flatMap((group) => group.words.map((word) => ({ ...word, letter: group.letter }))));
     const combinationTotal = result.combinations.reduce((total, group) => total + group.words.length, 0);
     const combinationShown = groups.reduce((total, group) => total + group.words.length, 0);
     return html`
@@ -287,7 +331,15 @@ export class SkraflApp extends LitElement {
           </h2>
           <span>hæsta skor <span aria-label="stjarna">★</span> <strong>${result.highscore}</strong></span>
         </div>
-        <p class="count" aria-live="polite">${words.length} / ${result.words.length} orð</p>
+        <div class="sort-row">
+          <p class="count" aria-live="polite">${words.length} / ${result.words.length} orð</p>
+          <div class="segmented" role="group" aria-label="Röðun">
+            <button type="button" class="secondary" aria-pressed=${String(!bySort)}
+              @click=${() => { this.sortMode = 'default'; }}>Sjálfgefið</button>
+            <button type="button" class="secondary" aria-pressed=${String(bySort)}
+              @click=${() => { this.sortMode = 'score'; }}>Hæsta skor</button>
+          </div>
+        </div>
         <div class="word-list">
           ${words.map((word) => this.renderWord(word))}
         </div>
@@ -299,7 +351,8 @@ export class SkraflApp extends LitElement {
           <h2 id="combinations-heading">Að viðbættum einum staf</h2>
           <p class="count" aria-live="polite">Samsetningar: ${combinationShown} / ${combinationTotal} orð</p>
           <div class="word-list">
-            ${groups.filter((group) => group.words.length).map((group) => html`
+            ${bySort ? flat.map((word) => this.renderWord(word, word.letter))
+              : groups.filter((group) => group.words.length).map((group) => html`
               <div class="combination-group">
                 <span class="letter" aria-label=${`Viðbættur stafur ${group.letter}`}>${group.letter}</span>
                 ${group.words.map((word) => this.renderWord(word))}
@@ -383,6 +436,10 @@ export class SkraflApp extends LitElement {
                 autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
                 enterkeyhint="search" placeholder="Stafir, ? eða =mynstur" .value=${this.input}
                 @input=${(event: Event) => { this.input = (event.target as HTMLInputElement).value; }}>
+              ${this.input ? html`<button type="button" class="secondary icon" aria-label="Hreinsa stafi"
+                title="Hreinsa" @click=${this.clearInput}>✕</button>` : nothing}
+              <button type="button" class="secondary icon" aria-label="Mynstur (=)" title="Mynstur (=)"
+                aria-pressed=${String(this.input.startsWith('='))} @click=${this.toggleEquals}>=</button>
               <button type="submit">Finna öll möguleg orð</button>
             </div>
           </form>
@@ -415,6 +472,15 @@ export class SkraflApp extends LitElement {
     .panel { border: 1px solid #c9d8ce; border-radius: 12px; background: #fff; padding: 18px; margin-bottom: 16px; }
     .search-panel { background: #f1f7f2; border-top: 4px solid #28733e; }
     label, legend { font-weight: 600; }
+    button.icon { min-width: 44px; padding: 9px 12px; }
+    .sort-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .segmented { display: flex; }
+    .segmented button { border-radius: 0; padding: 6px 12px; min-height: 36px; }
+    .segmented button:first-child { border-radius: 7px 0 0 7px; }
+    .segmented button:last-child { border-radius: 0 7px 7px 0; }
+    .segmented button[aria-pressed="true"] { background: #246e3b; color: white; border-color: #246e3b; }
+    .positions.end { justify-content: flex-end; }
+    .added { background: #d9eaf1; color: #204c62; border-radius: 4px; padding: 0 5px; margin-right: 4px; font-weight: 700; }
     .search-row { display: flex; gap: 10px; margin-top: 10px; }
     input, button { min-height: 44px; border: 1px solid #899e90; border-radius: 7px; font: inherit; font-size: 16px; }
     input { padding: 9px 10px; background: white; color: #20352c; min-width: 0; }
@@ -457,8 +523,9 @@ export class SkraflApp extends LitElement {
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
       clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     @media (max-width: 560px) {
-      .search-row { flex-direction: column; }
-      .search-row button { width: 100%; }
+      .search-row { flex-wrap: wrap; }
+      .search-row #rack { flex-basis: 100%; }
+      .search-row button[type="submit"] { flex: 1; }
       .panel { padding: 14px; }
       .result-heading { align-items: flex-start; }
     }

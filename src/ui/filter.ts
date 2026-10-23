@@ -2,6 +2,7 @@ export interface WordFilter {
   min: number;
   max: number;
   positions: readonly string[];
+  endPositions: readonly string[];
   contains: string;
 }
 
@@ -11,6 +12,10 @@ export function matchesFilter(word: string, filter: WordFilter): boolean {
   for (let index = 0; index < filter.max; index++) {
     const letter = (filter.positions[index] ?? '').trim().toLocaleLowerCase('is');
     if (letter && normalized[index] !== letter) return false;
+  }
+  for (let index = 0; index < filter.max; index++) {
+    const letter = (filter.endPositions[index] ?? '').trim().toLocaleLowerCase('is');
+    if (letter && normalized[normalized.length - 1 - index] !== letter) return false;
   }
   let remaining = normalized;
   for (const letter of filter.contains.trim().toLocaleLowerCase('is')) {
@@ -30,4 +35,11 @@ export function wordLengthBounds(words: readonly { word: string }[]): { min: num
     max = Math.max(max, word.length);
   }
   return { min, max };
+}
+
+export function sortByScore<T extends { score: number }>(words: readonly T[]): T[] {
+  return words
+    .map((word, index) => ({ word, index }))
+    .sort((left, right) => right.word.score - left.word.score || left.index - right.index)
+    .map(({ word }) => word);
 }
