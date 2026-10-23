@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SearchResult } from '../../src/engine/tabulator';
-import { matchesFilter, wordLengthBounds, type WordFilter } from '../../src/ui/filter';
+import { matchesFilter, sortByScore, wordLengthBounds, type WordFilter } from '../../src/ui/filter';
 
-const defaults: WordFilter = { min: 1, max: 15, positions: [], contains: '' };
+const defaults: WordFilter = { min: 1, max: 15, positions: [], endPositions: [], contains: '' };
 
 describe('result filters', () => {
   it('applies inclusive length bounds', () => {
@@ -103,6 +103,28 @@ describe('result filters', () => {
     expect(matchesFilter('þá', filter)).toBe(false);
   });
 
+  it('matches letters counted from the end of the word', () => {
+    const filter = { ...defaults, endPositions: ['Ð', 'I'] };
+    expect(matchesFilter('húsið', filter)).toBe(true);
+    expect(matchesFilter('húsin', filter)).toBe(false);
+    expect(matchesFilter('ð', filter)).toBe(false);
+  });
+
+  it('combines start and end positions', () => {
+    const filter = { ...defaults, positions: ['h'], endPositions: ['', '', 's'] };
+    expect(matchesFilter('húsið', filter)).toBe(true);
+    expect(matchesFilter('hás', { ...filter, endPositions: ['s'] })).toBe(true);
+    expect(matchesFilter('hús', { ...filter, endPositions: ['', '', 'h'] })).toBe(true);
+    expect(matchesFilter('lús', { ...filter, endPositions: ['s'] })).toBe(false);
+  });
+
+  it('sorts by score descending, stably', () => {
+    const words = [{ word: 'a', score: 2 }, { word: 'b', score: 5 }, { word: 'c', score: 2 }, { word: 'd', score: 5 }];
+    expect(sortByScore(words).map(({ word }) => word)).toEqual(['b', 'd', 'a', 'c']);
+    expect(words[0]!.word).toBe('a');
+    expect(sortByScore([])).toEqual([]);
+  });
+
   it('requires each occurrence of contains letters, in any order', () => {
     const filter = { ...defaults, contains: ' AAA ' };
     expect(matchesFilter('banani', filter)).toBe(false);
@@ -111,7 +133,7 @@ describe('result filters', () => {
   });
 
   it('combines positional, length and multiset filters', () => {
-    const filter = { min: 4, max: 5, positions: ['', 'Ú'], contains: 'hð' };
+    const filter = { min: 4, max: 5, positions: ['', 'Ú'], endPositions: [], contains: 'hð' };
     expect(matchesFilter('húsið', filter)).toBe(true);
     expect(matchesFilter('húsi', filter)).toBe(false);
     expect(matchesFilter('húsinu', filter)).toBe(false);
