@@ -497,8 +497,8 @@ export class SkraflApp extends LitElement {
     #filter-contains { width: 105px; }
     fieldset { margin: 0; padding: 0; border: 0; min-width: 0; flex: 1 1 100%; }
     legend { padding: 0; margin-bottom: 6px; }
-    .positions { display: flex; gap: 5px; flex-wrap: wrap; }
-    input.position { width: 44px; text-align: center; padding: 8px 2px; }
+    .positions { display: flex; gap: 5px; flex-wrap: nowrap; }
+    input.position { flex: 1 1 0; min-width: 0; max-width: 44px; width: 44px; text-align: center; padding: 8px 2px; box-sizing: border-box; }
     .word-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .chip { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 44px;
       padding: 8px 11px; border-radius: 6px; text-decoration: none; font-weight: 650; }
