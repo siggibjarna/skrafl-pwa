@@ -6,16 +6,25 @@ export interface WordFilter {
   contains: string;
 }
 
+// A position box holds any number of letters; a word matches if its letter there is one of them.
+function positionLetters(value: string | undefined): string {
+  return (value ?? '').replace(/[\s,;]/g, '').toLocaleLowerCase('is');
+}
+
+function allows(letters: string, letter: string | undefined): boolean {
+  return letter !== undefined && letters.includes(letter);
+}
+
 export function matchesFilter(word: string, filter: WordFilter): boolean {
   const normalized = word.toLocaleLowerCase('is');
   if (normalized.length < filter.min || normalized.length > filter.max) return false;
   for (let index = 0; index < filter.max; index++) {
-    const letter = (filter.positions[index] ?? '').trim().toLocaleLowerCase('is');
-    if (letter && normalized[index] !== letter) return false;
+    const letters = positionLetters(filter.positions[index]);
+    if (letters && !allows(letters, normalized[index])) return false;
   }
   for (let index = 0; index < filter.max; index++) {
-    const letter = (filter.endPositions[index] ?? '').trim().toLocaleLowerCase('is');
-    if (letter && normalized[normalized.length - 1 - index] !== letter) return false;
+    const letters = positionLetters(filter.endPositions[index]);
+    if (letters && !allows(letters, normalized[normalized.length - 1 - index])) return false;
   }
   let remaining = normalized;
   for (const letter of filter.contains.trim().toLocaleLowerCase('is')) {
