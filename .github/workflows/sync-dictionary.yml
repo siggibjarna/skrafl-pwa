@@ -76,9 +76,18 @@ jobs:
               python "$GITHUB_WORKSPACE/tests/differential/generate.py" "$GITHUB_WORKSPACE/.cache/differential.json"
             )
             REQUIRE_DIFFERENTIAL=1 npm run test:differential
-            npm run build
+            npx playwright install --with-deps webkit
+            npm run test:ui
             npm run size
           } 2>&1 | tee .cache/dictionary-sync.log
+      - name: Upload mobile UI diagnostics
+        if: failure() && steps.candidate.outputs.changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mobile-webkit-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Export verified lock only
         id: lock
         if: steps.candidate.outputs.changed == 'true'

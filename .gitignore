@@ -7,3 +7,5 @@ public/mock/
 __pycache__/
 .DS_Store
 .browser-verification/
+playwright-report/
+test-results/

@@ -21,11 +21,17 @@ describe('result filters', () => {
       search(input: string, push: boolean): Promise<void>;
       bounds: { min: number; max: number };
       positions: string[];
+      endPositions: string[];
+      filterMin: string;
       filterMax: string;
       appliedFilter: WordFilter;
       applyFilters(): void;
       readonly displayRack: string;
       readonly displayValid: boolean;
+      renderFilters(): { values: unknown[] };
+      renderPositions(end: boolean): {
+        values: [string, { values: [number[], (index: number) => number, (index: number) => { values: unknown[] }] }];
+      };
       renderWord(word: { word: string; score: number }): { values: unknown[] };
     }
     let createApp: () => AppHarness;
@@ -70,6 +76,33 @@ describe('result filters', () => {
       const app = createApp();
       app.result = result({ rack: 'af' });
       expect(app.renderWord({ word: 'afi', score: 6 }).values.at(-1)).toBe(6);
+    });
+
+    it('spaces the length range and displays a single value when bounds coincide', () => {
+      const app = createApp();
+      app.bounds = { min: 2, max: 5 };
+      app.filterMin = '3';
+      app.filterMax = '5';
+      expect(app.renderFilters().values[0]).toBe('3 – 5');
+      app.filterMax = '3';
+      expect(app.renderFilters().values[0]).toBe(3);
+    });
+
+    it('sizes both position sets from their current Unicode characters', () => {
+      const app = createApp();
+      app.bounds = { min: 1, max: 4 };
+      app.filterMax = '4';
+      app.positions = ['', 'æ', '\u{1F600}a'];
+      app.endPositions = ['', 'áa'];
+      const start = app.renderPositions(false).values[1].values;
+      const end = app.renderPositions(true).values[1].values;
+      expect(start[0]).toEqual([0, 1, 2, 3]);
+      expect(start[2](0).values).toContain('--position-extra-width: 0ch');
+      expect(start[2](1).values).toContain('--position-extra-width: 1ch');
+      expect(start[2](2).values).toContain('--position-extra-width: 2ch');
+      expect(end[0]).toEqual([3, 2, 1, 0]);
+      expect(end[2](1).values).toContain('Stafir í sæti 2 frá enda');
+      expect(end[2](1).values).toContain('--position-extra-width: 2ch');
     });
 
     it('passes raw input through for engine truncate-before-strip handling', async () => {

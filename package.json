@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "test": "vitest run tests/unit",
     "test:differential": "vitest run tests/differential",
+    "test:ui": "npm run build && playwright test",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "size": "tsx scripts/bundle-size.ts"
@@ -20,6 +21,7 @@
     "lit": "^3.3.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/node": "^24.19.2",
     "eslint": "^10.12.0",
     "tsx": "^4.23.15",

@@ -20,9 +20,12 @@ redistributing either source or dictionary data.
   or more letters.
   Rack mode without blanks also offers words made by adding one letter.
 - Filter both result lists by length, fixed positions, or required letters.
-  Repeated required letters require repeated occurrences.
+  Position fields expand as you type; repeated required letters require repeated
+  occurrences.
 - Click a word to search it. Queries use `?rack=…`, so links and browser Back/Forward work.
   The help dialog explains the Icelandic controls and credits.
+- Double-tap zoom is suppressed to avoid accidental zooming during quick taps;
+  pinch-to-zoom remains available.
 
 Scores are letter totals, not a board solver: premium squares, crossing words,
 and turn-level bonuses are not included.
@@ -62,7 +65,8 @@ ROOT="$PWD"
 SHA="$(node -p 'JSON.parse(require("fs").readFileSync("dictionary.lock.json", "utf8")).upstreamSha')"
 (cd ".cache/upstream/Skrafl-$SHA" && python "$ROOT/tests/differential/generate.py" "$ROOT/.cache/differential.json")
 REQUIRE_DIFFERENTIAL=1 npm run test:differential
-npm run build
+npx playwright install webkit
+npm run test:ui
 npm run size
 npm run preview
 ```
@@ -71,6 +75,28 @@ The Python fixture generator runs **inside the pinned upstream directory**, with
 an absolute output path. It uses upstream Python directly, not the TypeScript
 engine. Without fixtures, local differential tests may skip; setting
 `REQUIRE_DIFFERENTIAL=1` makes missing fixtures an error, as in CI.
+
+`npm run test:ui` builds the production PWA and runs the mobile WebKit tests with
+an iPhone 16 Pro-sized viewport and touch input. The tests check layout geometry
+instead of platform-dependent screenshot baselines and save screenshots and
+traces on failure. Install WebKit with `npx playwright install webkit` first.
+These tests do not reproduce the iOS keyboard, Home Screen lifecycle, safe areas,
+or real pinch and double-tap gestures.
+
+### iPhone PWA smoke test
+
+After touch or layout changes, periodically check the installed Home Screen app
+on an iPhone 16 Pro or newer:
+
+1. Open it online, install any offered update, and search for `stafir`.
+2. Check that the search label fits, `?` inserts at the caret without dismissing
+   the keyboard, `✕` clears the rack, and `=` alone retains its selected state.
+3. Double-tap the page and controls: the page should not zoom. Pinch in and out
+   to confirm zoom still works; also check scrolling and the length sliders.
+4. Change the length range and type multiple letters in both position filters.
+   Check their sizing, result spacing, clearing, and filter restoration on reload.
+5. Once the app is cached, turn on airplane mode, reopen the Home Screen app,
+   and search for `hús`. Restore connectivity afterward.
 
 ## Installation and offline use
 
@@ -94,11 +120,13 @@ application's service-worker cache.
 
 - **CI:** pushes and pull requests run clean npm installation, type checking,
   lint, unit tests, pinned dictionary verification, cached Python oracle
-  generation, full differential tests, production build, and JavaScript gzip
-  size reporting. CI has read-only repository access.
+  generation, full differential tests, mobile WebKit tests of the production
+  build, and JavaScript gzip size reporting. Failed mobile tests upload screenshots
+  and traces. CI has read-only repository access.
 - **Dictionary sync:** weekly on Monday at 05:23 UTC, or manually on `main`.
   It compares the latest upstream commit touching `resources/` with
-  `dictionary.lock.json`, builds the candidate, and runs the complete checks.
+  `dictionary.lock.json`, builds the candidate, and runs the complete checks,
+  including mobile WebKit tests.
   Only a passing candidate's lock is committed; there is no PR auto-merge.
   A separate writer job refuses to overwrite a changed `main` and uses a
   non-force push. Failure creates an issue with bounded diagnostic output.

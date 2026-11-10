@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "types": ["vite/client", "vite-plugin-pwa/client", "node"]
   },
-  "include": ["src", "tests", "scripts/*.ts", "vite.config.ts"]
+  "include": ["src", "tests", "scripts/*.ts", "vite.config.ts", "playwright.config.ts"]
 }

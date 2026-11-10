@@ -344,6 +344,7 @@ export class SkraflApp extends LitElement {
         autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
         aria-label=${end ? `Stafir í sæti ${index + 1} frá enda` : `Stafir í sæti ${index + 1}`}
         placeholder=${String(index + 1)} .value=${values[index] ?? ''}
+        style=${`--position-extra-width: ${Array.from(values[index] ?? '').length}ch`}
         @input=${(event: Event) => {
           const next = [...values];
           next[index] = (event.target as HTMLInputElement).value;
@@ -360,8 +361,8 @@ export class SkraflApp extends LitElement {
     return html`
       <section class="panel filters" aria-label="Sía niðurstöður">
         <fieldset>
-          <legend>Lengd: <span class="range-text">${low === high ? low : `${low}–${high}`}</span></legend>
-          <div class="filter-row">
+          <legend>Lengd: <span class="range-text">${low === high ? low : `${low} – ${high}`}</span></legend>
+          <div class="filter-row length-row">
             ${this.renderStepper('min')}<span aria-hidden="true">–</span>${this.renderStepper('max')}
           </div>
           ${max > min ? html`<div class="range">
@@ -585,7 +586,7 @@ export class SkraflApp extends LitElement {
   }
 
   static override styles = css`
-    :host { display: block; color: #20352c; font: 16px/1.5 system-ui, -apple-system, sans-serif; }
+    :host { display: block; touch-action: manipulation; color: #20352c; font: 16px/1.5 system-ui, -apple-system, sans-serif; }
     * { box-sizing: border-box; }
     main { max-width: 1100px; margin: auto; padding: max(18px, env(safe-area-inset-top))
       max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom))
@@ -605,21 +606,26 @@ export class SkraflApp extends LitElement {
     .segmented button { border-radius: 0; padding: 6px 12px; min-height: 36px; }
     .segmented button:first-child { border-radius: 7px 0 0 7px; }
     .segmented button:last-child { border-radius: 0 7px 7px 0; }
-    .segmented button[aria-pressed="true"] { background: #246e3b; color: white; border-color: #246e3b; }
     .positions.end { justify-content: flex-end; }
     .added { background: #d9eaf1; color: #204c62; border-radius: 4px; padding: 0 5px; margin-right: 4px; font-weight: 700; }
     .search-row { display: flex; gap: 10px; margin-top: 10px; }
+    .search-row button[type="submit"] { white-space: nowrap; }
     input, button { min-height: 44px; border: 1px solid #899e90; border-radius: 7px; font: inherit; font-size: 16px; }
     input { padding: 9px 10px; background: white; color: #20352c; min-width: 0; }
     #rack { flex: 1; width: 100%; font-size: 20px; }
     button { padding: 9px 15px; cursor: pointer; color: white; background: #246e3b; border-color: #246e3b; font-weight: 600; }
     button.secondary { background: white; color: #28563b; border-color: #9eafa4; }
+    button.secondary[aria-pressed="true"] { background: #246e3b; color: white; border-color: #246e3b; }
     button:disabled { opacity: .6; cursor: wait; }
     a { color: #1b6235; }
-    button:hover, .chip:hover { filter: brightness(.94); }
+    button:active:not(:disabled), .chip:active { filter: brightness(.94); }
+    @media (hover: hover) and (pointer: fine) {
+      button:hover:not(:disabled), .chip:hover { filter: brightness(.94); }
+    }
     :is(a, button, input):focus-visible { outline: 3px solid #226bc6; outline-offset: 3px; }
     .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
     .filter-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .length-row { justify-content: space-between; gap: 4px; }
     .stepper { display: inline-flex; align-items: center; gap: 4px; }
     .stepper output { min-width: 2ch; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
     .stepper button:disabled { opacity: .4; cursor: default; }
@@ -639,7 +645,6 @@ export class SkraflApp extends LitElement {
       background: #246e3b; border: 3px solid #fff; box-shadow: 0 0 0 1px #246e3b; cursor: grab; }
     .tiles { display: flex; flex-wrap: wrap; gap: 8px; }
     .tile { min-width: 44px; font-size: 18px; text-transform: uppercase; }
-    .tile[aria-pressed="true"] { background: #246e3b; color: white; border-color: #246e3b; }
     .sticky-bar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
       gap: 10px; flex-wrap: wrap; margin: 0 -4px 12px; padding: 8px 4px; background: #f6faf7ee;
       backdrop-filter: blur(6px); border-bottom: 1px solid #c9d8ce; }
@@ -649,8 +654,14 @@ export class SkraflApp extends LitElement {
     fieldset { margin: 0; padding: 0; border: 0; min-width: 0; flex: 1 1 100%; }
     legend { padding: 0; margin-bottom: 6px; }
     .positions { display: flex; gap: 5px; flex-wrap: wrap; }
-    input.position { flex: 0 0 auto; width: 58px; text-align: center; padding: 8px 2px; }
+    input.position { flex: 0 0 auto; width: min(100%, calc(44px + var(--position-extra-width)));
+      text-align: center; padding: 8px 2px; }
+    @supports (field-sizing: content) {
+      input.position { field-sizing: content; width: auto; min-width: 44px; max-width: 100%; }
+      input.position:not(:placeholder-shown) { min-width: 52px; }
+    }
     .word-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .panel > .word-list { margin-top: 12px; }
     .chip { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 44px;
       padding: 8px 11px; border-radius: 6px; text-decoration: none; font-weight: 650; }
     .regular, .original { background: #246e3b; color: white; }
@@ -665,7 +676,7 @@ export class SkraflApp extends LitElement {
     .notice { padding: 16px; margin: 16px 0; background: #fff3dc; border: 1px solid #d2a345; border-radius: 8px; }
     .loading { color: #3a6548; }
     .update { margin-bottom: 16px; }
-    dialog { color: #20352c; max-width: min(700px, calc(100vw - 32px)); width: 100%;
+    dialog { touch-action: manipulation; color: #20352c; max-width: min(700px, calc(100vw - 32px)); width: 100%;
       max-height: 85dvh; padding: 22px; border: 1px solid #a5b9ac; border-radius: 12px;
       box-shadow: 0 12px 50px #0003; font: inherit; }
     dialog::backdrop { background: #142b2280; }
@@ -674,9 +685,9 @@ export class SkraflApp extends LitElement {
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
       clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     @media (max-width: 560px) {
-      .search-row { flex-wrap: wrap; }
+      .search-row { flex-wrap: wrap; gap: 6px; }
       .search-row #rack { flex-basis: 100%; }
-      .search-row button[type="submit"] { flex: 1; }
+      .search-row button[type="submit"] { flex: 1 0 max-content; padding-inline: 8px; }
       .panel { padding: 14px; }
       .result-heading { align-items: flex-start; }
     }
