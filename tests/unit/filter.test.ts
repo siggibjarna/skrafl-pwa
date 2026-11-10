@@ -118,6 +118,16 @@ describe('result filters', () => {
     expect(matchesFilter('lús', { ...filter, endPositions: ['s'] })).toBe(false);
   });
 
+  it('accepts several letters per position box', () => {
+    const filter = { ...defaults, positions: ['', 'al'], endPositions: ['', 'Ú, s'] };
+    expect(matchesFilter('ball', { ...filter, endPositions: [] })).toBe(true);
+    expect(matchesFilter('ale', { ...filter, endPositions: [] })).toBe(true);
+    expect(matchesFilter('bil', { ...filter, endPositions: [] })).toBe(false);
+    expect(matchesFilter('bús', { ...defaults, endPositions: ['', 'ús'] })).toBe(true);
+    expect(matchesFilter('hás', { ...defaults, endPositions: ['', 'ús'] })).toBe(false);
+    expect(matchesFilter('a', { ...defaults, positions: ['', 'al'] })).toBe(false);
+  });
+
   it('sorts by score descending, stably', () => {
     const words = [{ word: 'a', score: 2 }, { word: 'b', score: 5 }, { word: 'c', score: 2 }, { word: 'd', score: 5 }];
     expect(sortByScore(words).map(({ word }) => word)).toEqual(['b', 'd', 'a', 'c']);
